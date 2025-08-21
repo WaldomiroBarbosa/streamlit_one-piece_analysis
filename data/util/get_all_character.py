@@ -1,6 +1,6 @@
 import json
 
-with open("../one_piece_chapters_1755726590.jsonl", "r", encoding="utf-8") as f:
+with open("../onepiece_data.jsonl", "r", encoding="utf-8") as f:
     database = [json.loads(line) for line in f]
 
 def create_json_file():
@@ -8,7 +8,9 @@ def create_json_file():
     
     for data in database:
         character_list = data.get("characters", [])
-        all_characters.update(character_list)
+        # remove todos que tenham "(cover)" no nome
+        clean_list = [c for c in character_list if "(cover)" not in c]
+        all_characters.update(clean_list)
     
     all_characters_list = sorted(all_characters)
 

@@ -1,11 +1,15 @@
 import requests
 import time
 import json
+import re
 
 from bs4 import BeautifulSoup
-from requests.adapters import HTTPAdapter
+from datetime import datetime
+from urllib.parse import unquote
 from urllib3.util.retry import Retry
+from requests.adapters import HTTPAdapter
 from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 session = requests.Session()
 session.headers.update({"User-Agent": "Mozilla/5.0"})
@@ -22,32 +26,89 @@ session.mount("http://", adapter)
 session.mount("https://", adapter)
 
 
-def get_characters_in_chapter(chapter_url: str):
+def extrair_texto(elemento, tag, atributos):
+    if elemento:
+        found = elemento.find(tag, atributos)
+        return found.text.strip() if found else None
+    return None
+
+def parse_date(date_str: str):
+    try:
+        return datetime.strptime(date_str, "%B %d, %Y")
+    except ValueError:
+        pass
+
+    pattern = r"^(?P<month>\w+)\s+(?P<day>\d{1,2}),\s+(?P<year>\d{4})$"
+    match = re.match(pattern, date_str)
+    if match:
+        month_str = match.group("month")
+        day = int(match.group("day"))
+        year = int(match.group("year"))
+
+        try:
+            month = datetime.strptime(month_str, "%B").month
+            return datetime(year, month, day)
+        except ValueError:
+            pass
+    
+    return None
+
+def extract_chapter_data(chapter_url: str):
+    
     try:
         response = session.get(chapter_url, timeout=20)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         print(f"❌ Erro ao acessar {chapter_url}: {e}")
-        return []
+        return {}
 
     try:
         soup = BeautifulSoup(response.text, 'html.parser')
-        char_table = soup.find('table', class_="CharTable")
-        if not char_table:
-            return []
-        
+
+        title = extrair_texto(soup, 'h2', {'data-source': 'title'})
+
+        data_element = soup.find('div', {'data-source': 'date2'})
+        date_value = None
+        if data_element:
+            div_val = data_element.find('div', {'class': 'pi-data-value'})
+            if div_val:
+                # remove spans/sup que atrapalham
+                for tag in div_val.find_all(['sup', 'span']):
+                    tag.decompose()
+                date_value = div_val.get_text(strip=True)
+
+        date_format = parse_date(date_value) if date_value else None
+
         characters = []
-        for ul in char_table.find_all('ul'):
-            for li in ul.find_all('li'):
-                for a in li.find_all('a', href=True):
-                    href = a["href"]
-                    if href.startswith("/wiki/"):
-                        name = href.replace("/wiki/", "").replace("_", " ")
-                        characters.append(name)
-        return characters
+        char_table = soup.find('table', class_="CharTable")
+        if char_table:
+            for ul in char_table.find_all('ul'):
+                for li in ul.find_all('li'):
+                    for a in li.find_all('a', href=True):
+                        if a["href"].startswith("/wiki/"):
+                            raw_name = a["href"].replace("/wiki/", "").replace("_", " ")
+
+                            if "%" in raw_name:
+                                name = unquote(raw_name)
+                            else:
+                                name = raw_name
+
+                            # Verificar no <li> inteiro se tem "(cover)"
+                            li_text = li.get_text(" ", strip=True).lower()
+                            if "(cover)" in li_text:
+                                name += " (cover)"
+
+                            characters.append(name)
+
+        return {
+            'title': title,
+            'date': date_format,
+            'characters': characters
+        }
+
     except Exception as e:
         print(f"❌ Erro ao processar HTML de {chapter_url}: {e}")
-        return []
+        return {}
 
 def get_all_chapters_url(start_url: str):
     current_url = start_url
@@ -75,6 +136,10 @@ def get_all_chapters_url(start_url: str):
     print(f"\n✅ Total de capítulos coletados: {len(chapter_urls)}")
     return chapter_urls
 
+def load_database():
+    with open("one_piece_chapters_1755749489.jsonl", "r", encoding="utf-8") as f:
+        return [json.loads(line) for line in f]
+    
 def create_json_file():
     start_url = "https://onepiece.fandom.com/wiki/Chapter_1"
     url_list = get_all_chapters_url(start_url)
@@ -85,18 +150,23 @@ def create_json_file():
         with ThreadPoolExecutor(max_workers=4) as executor:
 
             futures = {
-                executor.submit(get_characters_in_chapter, url): (i, url)
+                executor.submit(extract_chapter_data, url): (i, url)
                 for i, url in enumerate(url_list, start=1)
             }
 
             for future in as_completed(futures):
                 i, url = futures[future]
                 try:
-                    characters = future.result()
+                    data = future.result() or {}
+                    characters = data.get("characters", [])
+                    # remover duplicatas mantendo ordem
+                    characters = list(dict.fromkeys(characters))
                     chapter_data = {
                         "chapter_number": str(i),
                         "chapter_url": url,
-                        "characters": characters if characters else []
+                        "title": data.get("title"),
+                        "date": data.get("date").strftime("%Y-%m-%d") if data.get("date") else None,
+                        "characters": characters
                     }
                     f.write(json.dumps(chapter_data, ensure_ascii=False) + "\n")
                     f.flush()
