@@ -125,7 +125,7 @@ def get_all_chapters_url(start_url: str):
 
             next_link = soup.find('a', string='Next Chapter')
             if next_link and 'href' in next_link.attrs:
-                current_url = f"https://onepiece.fandom.com{next_link['href']}"
+                current_url = f"one piece wiki{next_link['href']}"
                 print(f"Coletados: {len(chapter_urls)} capítulos", end="\r")
             else:
                 break
@@ -141,7 +141,7 @@ def load_database():
         return [json.loads(line) for line in f]
     
 def create_json_file():
-    start_url = "https://onepiece.fandom.com/wiki/Chapter_1"
+    start_url = "one piece wiki"
     url_list = get_all_chapters_url(start_url)
 
     json_filename = f"one_piece_chapters_{int(time.time())}.jsonl"

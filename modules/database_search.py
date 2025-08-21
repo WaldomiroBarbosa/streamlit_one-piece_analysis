@@ -5,7 +5,7 @@ from datetime import datetime
 from collections import defaultdict
 
 from data.arcs_data import StoryArcs
-CHAPTERS_FILE = "./data/chapters.jsonl"
+CHAPTERS_FILE = "./data/onepiece_data.jsonl"
 CHARACTERS_FILE = "./data/all_characters.json"
 
 @st.cache_data
@@ -18,8 +18,11 @@ def load_characters():
     with open(CHARACTERS_FILE, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def get_character_list():
-    return load_characters()
+def get_character_list(query: str):
+    characters = load_characters()
+    if not query:
+        return []
+    return [c for c in characters if query.lower() in c.lower()][:10]
 
 def get_total_chapters():
     return len(load_chapters())
@@ -38,20 +41,57 @@ def get_last_appearance(character: str):
             return ch
     return None
 
+def get_all_appearances(character: str):
+    chapters = load_chapters()
+    chapter_list = []
+    for ch in sorted(chapters, key=lambda c: int(c["chapter_number"])):
+        if character in ch.get("characters", []):
+            chapter_list.append(ch.get("chapter_number"))
+    return chapter_list
+
 def get_total_appearances(character: str):
     chapters = load_chapters()
     return sum(1 for ch in chapters if character in ch.get("characters", []))
 
-def get_appearances_by_year(character: str):
+def get_appearances_by_year(character: str, mode: str = "year"):
     chapters = load_chapters()
     appearances = defaultdict(int)
+
     for ch in chapters:
         if character in ch.get("characters", []):
-            if ch.get("date"):
-                year = datetime.fromisoformat(ch["date"]).year
-                appearances[year] += 1
+            date = ch.get("date")
+            if not date:
+                continue
+            year = datetime.fromisoformat(date).year
+            if mode == "year":
+                key = year
+            elif mode == "decade":
+                key = (year // 10) * 10  # 2005 → 2000
+            appearances[key] += 1
+
     return dict(sorted(appearances.items()))
 
+def get_arc_by_chapter(chapter_number: int):
+    for arc in StoryArcs:
+        _, title, start, end = arc.value
+        if end is None: 
+            if chapter_number >= start:
+                return arc
+        elif start <= chapter_number <= end:
+            return arc
+    return None
+
+def get_appearances_by_arc(character: str):
+    chapters = load_chapters()
+    appearances = defaultdict(int)
+    for ch in sorted(chapters, key=lambda c: int(c["chapter_number"])):
+        if character in ch.get("characters", []):
+            arc = get_arc_by_chapter(int(ch["chapter_number"]))
+            if arc:
+                _, title, _, _ = arc.value
+                appearances[title] += 1
+    return dict(sorted(appearances.items()))
+            
 def get_coappearances(character: str, exclude=None):
     if exclude is None:
         exclude = []
