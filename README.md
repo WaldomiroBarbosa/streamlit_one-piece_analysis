@@ -31,3 +31,15 @@ Instale as dependências:
 ```bash
 pip install -r requirements.txt
 ```
+
+Como rodar o app:
+
+```bash
+streamlit run app.py
+```
+
+## Créditos 
+
+Dados obtidos pelos sites [One Piece Wiki](https://onepiece.fandom.com/wiki/One_Piece_Wiki) e [TheGrandLine](https://www.thegrandline.com/odatocLIVE.htm)
+
+**One Piece** por Eiichiro Oda
