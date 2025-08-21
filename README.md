@@ -38,7 +38,7 @@ Como rodar o app:
 streamlit run app.py
 ```
 
-## Créditos 
+## 📋 Créditos 
 
 Dados obtidos pelos sites [One Piece Wiki](https://onepiece.fandom.com/wiki/One_Piece_Wiki) e [TheGrandLine](https://www.thegrandline.com/odatocLIVE.htm)
 
